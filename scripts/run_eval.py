@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run EuroBench v0.2 using dummy outputs or supplied JSONL model outputs."""
+"""Run EuroBench using dummy outputs or supplied JSONL model outputs."""
 
 from __future__ import annotations
 
@@ -14,6 +14,17 @@ from run_benchmark import build_results, load_outputs, load_suites, validate_sui
 
 
 def dummy_output(task: dict[str, Any]) -> str:
+    if task.get("expected_output"):
+        fields = task["expected_output"].get("fields", [])
+        source_ids = task["expected_output"].get("source_ids", [])
+        return (
+            "Dummy hard-mode smoke output. It is not a model-quality claim. "
+            "Fields: "
+            + ", ".join(fields)
+            + ". Source IDs: "
+            + ", ".join(source_ids)
+            + ". Cannot determine unsupported legal certainty from synthetic evidence alone."
+        )
     if task["expected_behavior"] == "refuse_and_redirect":
         return (
             "I should not help with that request. A safer option is to use authorized, "

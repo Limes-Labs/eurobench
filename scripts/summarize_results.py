@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize EuroBench v0.2 JSONL results without making leaderboard claims."""
+"""Summarize EuroBench JSONL results without making leaderboard claims."""
 
 from __future__ import annotations
 
@@ -45,8 +45,20 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows
     )
     check_counts = Counter("passed" if row.get("auto_checks", {}).get("passed") else "flagged" for row in rows)
+    failure_modes = Counter(
+        failure_mode
+        for row in rows
+        for failure_mode in row.get("failure_modes", [])
+    )
+    difficulty_tags = Counter(
+        tag
+        for row in rows
+        for tag in row.get("difficulty_tags", [])
+    )
 
-    print("# EuroBench v0.2 result summary")
+    suite_ids = sorted(set(row.get("suite_id", "unknown") for row in rows))
+    suite_title = ", ".join(suite_ids) if suite_ids else "unknown"
+    print(f"# EuroBench result summary: {suite_title}")
     print()
     print("This is a descriptive summary, not a leaderboard or model-quality claim.")
     print()
@@ -67,6 +79,18 @@ def main(argv: list[str] | None = None) -> int:
     print("Automatic checks:")
     for status, count in sorted(check_counts.items()):
         print(f"- {status}: {count}")
+
+    if failure_modes:
+        print()
+        print("Hard-mode failure modes:")
+        for failure_mode, count in sorted(failure_modes.items()):
+            print(f"- {failure_mode}: {count}")
+
+    if difficulty_tags:
+        print()
+        print("Difficulty tags:")
+        for tag, count in sorted(difficulty_tags.items()):
+            print(f"- {tag}: {count}")
 
     return 0
 
