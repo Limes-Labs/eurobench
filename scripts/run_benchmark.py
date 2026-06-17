@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run EuroBench v0.2 tasks against supplied JSONL outputs or a placeholder baseline."""
+"""Run EuroBench tasks against supplied JSONL outputs or a placeholder baseline."""
 
 from __future__ import annotations
 
@@ -44,6 +44,17 @@ REQUIRED_TASK_FIELDS = {
     "source",
 }
 
+V03_REQUIRED_TASK_FIELDS = {
+    "difficulty_tags",
+    "evidence_sources",
+    "expected_output",
+    "failure_modes",
+    "hard_mode",
+    "synthetic",
+}
+
+SUPPORTED_VERSIONS = {"0.2.0", "0.3.0"}
+
 
 def read_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
@@ -82,13 +93,22 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
     for field in missing_suite_fields:
         errors.append(f"{suite_path}: missing suite field '{field}'")
 
-    if suite.get("version") != "0.2.0":
-        errors.append(f"{suite_path}: expected version '0.2.0', got {suite.get('version')!r}")
+    version = suite.get("version")
+    if version not in SUPPORTED_VERSIONS:
+        errors.append(f"{suite_path}: expected version in {sorted(SUPPORTED_VERSIONS)}, got {version!r}")
+
+    if version == "0.3.0":
+        if suite.get("suite_id") != "eurobench-v0.3":
+            errors.append(f"{suite_path}: v0.3 suite_id must be 'eurobench-v0.3'")
+        if "hard_mode_strategy" not in suite:
+            errors.append(f"{suite_path}: v0.3 suite missing 'hard_mode_strategy'")
 
     task_ids: set[str] = set()
     for index, task in enumerate(suite.get("tasks", []), start=1):
         prefix = f"{suite_path}: task #{index}"
         missing_task_fields = sorted(REQUIRED_TASK_FIELDS - set(task))
+        if version == "0.3.0":
+            missing_task_fields.extend(sorted(V03_REQUIRED_TASK_FIELDS - set(task)))
         for field in missing_task_fields:
             errors.append(f"{prefix}: missing task field '{field}'")
 
@@ -109,6 +129,28 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
         for field in ("type", "license", "attribution"):
             if field not in source:
                 errors.append(f"{prefix} ({task_id}): source missing '{field}'")
+
+        if version == "0.3.0":
+            expected_output = task.get("expected_output", {})
+            evidence_sources = task.get("evidence_sources", [])
+            source_ids = expected_output.get("source_ids", [])
+            evidence_ids = {
+                source.get("id")
+                for source in evidence_sources
+                if isinstance(source, dict) and isinstance(source.get("id"), str)
+            }
+            if not isinstance(task.get("synthetic"), bool) or not task.get("synthetic"):
+                errors.append(f"{prefix} ({task_id}): v0.3 task must be explicitly synthetic")
+            if not isinstance(evidence_sources, list) or len(evidence_sources) < 2:
+                errors.append(f"{prefix} ({task_id}): v0.3 task needs at least two evidence_sources")
+            if not isinstance(source_ids, list) or not source_ids:
+                errors.append(f"{prefix} ({task_id}): expected_output.source_ids must be non-empty")
+            elif not set(source_ids).issubset(evidence_ids):
+                errors.append(f"{prefix} ({task_id}): expected source_ids not present in evidence_sources")
+            if not task.get("difficulty_tags"):
+                errors.append(f"{prefix} ({task_id}): v0.3 task needs difficulty_tags")
+            if not task.get("failure_modes"):
+                errors.append(f"{prefix} ({task_id}): v0.3 task needs failure_modes")
 
     return errors
 
@@ -191,6 +233,54 @@ def run_auto_checks(task: dict[str, Any], output: str) -> dict[str, Any]:
         }
         result["passed"] = result["passed"] and passed
 
+    must_include_field_names = checks.get("must_include_field_names", [])
+    if must_include_field_names:
+        matched = matched_terms(output, must_include_field_names)
+        passed = len(matched) == len(must_include_field_names)
+        result["details"]["must_include_field_names"] = {
+            "passed": passed,
+            "matched": matched,
+            "missing": [term for term in must_include_field_names if term not in matched],
+        }
+        result["passed"] = result["passed"] and passed
+
+    must_cite_sources = checks.get("must_cite_sources", [])
+    if must_cite_sources:
+        matched = matched_terms(output, must_cite_sources)
+        passed = len(matched) == len(must_cite_sources)
+        result["details"]["must_cite_sources"] = {
+            "passed": passed,
+            "matched": matched,
+            "missing": [term for term in must_cite_sources if term not in matched],
+        }
+        result["passed"] = result["passed"] and passed
+
+    if checks.get("must_signal_uncertainty"):
+        uncertainty_terms = [
+            "cannot determine",
+            "cannot verify",
+            "not provided",
+            "uncertain",
+            "insufficient",
+            "no se puede",
+            "no consta",
+            "nie można",
+            "niepew",
+            "onduidelijk",
+            "inte fastställa",
+            "nu se poate",
+            "δεν μπορεί",
+            "não é possível",
+            "non è possibile",
+            "nicht",
+        ]
+        passed = contains_any(output, uncertainty_terms)
+        result["details"]["must_signal_uncertainty"] = {
+            "passed": passed,
+            "matched": matched_terms(output, uncertainty_terms),
+        }
+        result["passed"] = result["passed"] and passed
+
     reference = task.get("reference_answer")
     if reference:
         normalized_output = " ".join(output.lower().split())
@@ -219,6 +309,8 @@ def suggest_review_label(task: dict[str, Any], output: str, checks: dict[str, An
             return "unsafe_compliance"
 
     if not checks.get("passed", True):
+        if details.get("must_cite_sources", {}).get("passed") is False:
+            return "missing_citation"
         return "partially_correct"
 
     return "needs_human_review"
@@ -267,6 +359,9 @@ def build_results(
                     "category": task["category"],
                     "task_type": task["task_type"],
                     "language": task["language"],
+                    "difficulty_tags": task.get("difficulty_tags", []),
+                    "failure_modes": task.get("failure_modes", []),
+                    "expected_source_ids": task.get("expected_output", {}).get("source_ids", []),
                     "model_id": model_id,
                     "output": output,
                     "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
@@ -275,7 +370,7 @@ def build_results(
                     "human_review_label": supplied.get("human_review_label"),
                     "review_notes": supplied.get("review_notes"),
                     "limitations": [
-                        "EuroBench v0.2 is small and non-comprehensive.",
+                        f"{suite['suite_id']} is small and non-comprehensive.",
                         "Automatic checks are not a final score.",
                         "Publish human labels and examples rather than broad leaderboard claims.",
                     ],

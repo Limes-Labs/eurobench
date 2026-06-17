@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Limes-Labs/eurobench/tasks/schema/eurobench_task.schema.json",
-  "title": "EuroBench v0.2 task shard",
+  "title": "EuroBench task shard",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,11 +16,17 @@
   "properties": {
     "version": {
       "type": "string",
-      "const": "0.2.0"
+      "enum": [
+        "0.2.0",
+        "0.3.0"
+      ]
     },
     "suite_id": {
       "type": "string",
-      "const": "eurobench-v0.2"
+      "enum": [
+        "eurobench-v0.2",
+        "eurobench-v0.3"
+      ]
     },
     "shard_id": {
       "type": "string",
@@ -85,6 +91,12 @@
         }
       }
     },
+    "hard_mode_strategy": {
+      "type": "object"
+    },
+    "generation": {
+      "type": "object"
+    },
     "tasks": {
       "type": "array",
       "minItems": 1,
@@ -121,7 +133,14 @@
             "french_institutional_qa",
             "german_institutional_qa",
             "translation_fidelity",
-            "constitutional_refusal"
+            "constitutional_refusal",
+            "institutional_qa_cited",
+            "cross_lingual_form_filling",
+            "glossary_translation",
+            "procurement_procedure_reasoning",
+            "ai_act_gdpr_boundary_caution",
+            "democratic_integrity_moderation",
+            "long_context_evidence_selection"
           ]
         },
         "task_type": {
@@ -129,7 +148,10 @@
           "enum": [
             "generative_qa",
             "translation",
-            "constitutional_behavior"
+            "constitutional_behavior",
+            "structured_extraction",
+            "moderation",
+            "evidence_selection"
           ]
         },
         "language": {
@@ -139,6 +161,9 @@
         "prompt": {
           "type": "string",
           "minLength": 20
+        },
+        "synthetic": {
+          "type": "boolean"
         },
         "context": {
           "type": "string"
@@ -193,8 +218,88 @@
               "items": {
                 "type": "string"
               }
+            },
+            "must_include_field_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "must_cite_sources": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "must_signal_uncertainty": {
+              "type": "boolean"
             }
           }
+        },
+        "difficulty_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failure_modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "expected_output": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "format": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "abstain_if": {
+              "type": "string"
+            }
+          }
+        },
+        "hard_mode": {
+          "type": "object"
         },
         "rubric": {
           "type": "object",
