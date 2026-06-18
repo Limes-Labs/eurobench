@@ -55,6 +55,16 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows
         for tag in row.get("difficulty_tags", [])
     )
+    scoring_dimensions = Counter(
+        dimension.get("id", "unknown")
+        for row in rows
+        for dimension in row.get("scoring", {}).get("dimensions", [])
+        if isinstance(dimension, dict)
+    )
+    max_points = sum(
+        row.get("scoring", {}).get("max_points", 0) or 0
+        for row in rows
+    )
 
     suite_ids = sorted(set(row.get("suite_id", "unknown") for row in rows))
     suite_title = ", ".join(suite_ids) if suite_ids else "unknown"
@@ -91,6 +101,13 @@ def main(argv: list[str] | None = None) -> int:
         print("Difficulty tags:")
         for tag, count in sorted(difficulty_tags.items()):
             print(f"- {tag}: {count}")
+
+    if scoring_dimensions:
+        print()
+        print("Scoring dimensions:")
+        print(f"- total possible human-reviewed points: {max_points}")
+        for dimension, count in sorted(scoring_dimensions.items()):
+            print(f"- {dimension}: {count}")
 
     return 0
 
