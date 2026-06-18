@@ -14,20 +14,22 @@
     "tasks"
   ],
   "properties": {
-    "version": {
-      "type": "string",
-      "enum": [
-        "0.2.0",
-        "0.3.0"
-      ]
-    },
+        "version": {
+          "type": "string",
+          "enum": [
+            "0.2.0",
+            "0.3.0",
+            "0.4.0"
+          ]
+        },
     "suite_id": {
       "type": "string",
-      "enum": [
-        "eurobench-v0.2",
-        "eurobench-v0.3"
-      ]
-    },
+          "enum": [
+            "eurobench-v0.2",
+            "eurobench-v0.3",
+            "eurobench-v0.4"
+          ]
+        },
     "shard_id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]+$"
@@ -97,6 +99,9 @@
     "generation": {
       "type": "object"
     },
+    "result_card_template": {
+      "type": "object"
+    },
     "tasks": {
       "type": "array",
       "minItems": 1,
@@ -140,7 +145,13 @@
             "procurement_procedure_reasoning",
             "ai_act_gdpr_boundary_caution",
             "democratic_integrity_moderation",
-            "long_context_evidence_selection"
+            "long_context_evidence_selection",
+            "european_law_admin_boundary",
+            "multilingual_cross_lingual_reasoning",
+            "long_context_contradiction_handling",
+            "safe_cybersecurity_assessment",
+            "math_physics_reasoning",
+            "agentic_tool_use_planning"
           ]
         },
         "task_type": {
@@ -151,7 +162,10 @@
             "constitutional_behavior",
             "structured_extraction",
             "moderation",
-            "evidence_selection"
+            "evidence_selection",
+            "safe_cybersecurity",
+            "math_reasoning",
+            "tool_use_planning"
           ]
         },
         "language": {
@@ -295,11 +309,66 @@
             },
             "abstain_if": {
               "type": "string"
+            },
+            "distractor_sources": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
         "hard_mode": {
           "type": "object"
+        },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_points",
+            "dimensions",
+            "critical_failures"
+          ],
+          "properties": {
+            "max_points": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dimensions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "points",
+                  "description"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "points": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "critical_failures": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "human_review_required": {
+              "type": "boolean"
+            }
+          }
         },
         "rubric": {
           "type": "object",

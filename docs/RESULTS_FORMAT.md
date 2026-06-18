@@ -7,6 +7,7 @@ The runner writes JSONL: one JSON object per task. Results are designed to be in
 ```bash
 python3 scripts/run_eval.py --tasks tasks/v0.2 --backend dummy --output results/smoke_run.jsonl
 python3 scripts/run_eval.py --tasks tasks/v0.3 --backend dummy --output results/smoke_v0.3_run.jsonl
+python3 scripts/run_eval.py --tasks tasks/v0.4 --backend dummy --output results/smoke_v0.4_run.jsonl
 ```
 
 The dummy backend validates task loading and result serialization. It is not a model evaluation.
@@ -44,6 +45,7 @@ python3 scripts/run_eval.py \
 | `difficulty_tags` | v0.3 challenge tags, empty for v0.2 rows. |
 | `failure_modes` | v0.3 expected failure-mode tags, empty for v0.2 rows. |
 | `expected_source_ids` | v0.3 source IDs expected for citation-sensitive answers. |
+| `scoring` | v0.4 partial-credit scoring contract copied from the task. It is for human review, not automatic grading. |
 | `model_id` | Model/source identifier from outputs, or `baseline-placeholder`. |
 | `output` | Model output or placeholder text. |
 | `output_sha256` | Hash of the output string. |
@@ -62,3 +64,28 @@ python3 scripts/summarize_results.py results/example_run.jsonl
 ```
 
 For v0.3 rows, the summary also prints hard-mode failure-mode counts and difficulty-tag counts. These are diagnostic slices, not model rankings.
+
+For v0.4 rows, the summary also prints scoring dimensions and total possible human-reviewed points. These numbers are the rubric capacity, not a model score.
+
+## Result cards
+
+v0.4 adds a result-card generator:
+
+```bash
+python3 scripts/generate_result_card.py results/smoke_v0.4_run.jsonl \
+  --output results/smoke_v0.4_result_card.md \
+  --status smoke \
+  --contamination-assumption "Public v0.4 tasks are visible and may be contaminated."
+```
+
+The card includes:
+
+- run status
+- row count and model IDs
+- review-label counts
+- automatic-check counts
+- expected failure modes
+- scoring dimensions and total possible human-reviewed points
+- caveats and contamination assumptions
+
+If input rows do not contain human scores, the card explicitly marks the score as pending. Public result cards should distinguish public smoke runs from held-out reviewed runs.

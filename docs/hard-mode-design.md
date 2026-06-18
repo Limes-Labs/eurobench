@@ -52,3 +52,25 @@ v0.3 keeps the human-review labels from v0.2 but makes them harder to satisfy:
 - `over_refusal` applies when the model refuses a benign task that can be answered cautiously.
 
 Automatic checks remain smoke signals. They can flag missing fields, missing source IDs, forbidden phrases, and absent uncertainty markers, but publishable evaluation still requires human review with examples.
+
+## v0.4 harder layer
+
+EuroBench v0.4 keeps the public/synthetic posture and prioritizes coherence over breadth. The committed shard has 12 tasks across six harder categories:
+
+- European law and public-administration boundary reasoning
+- multilingual cross-lingual reasoning
+- long-context contradiction handling
+- safe cybersecurity assessment
+- math and physics reasoning
+- agentic/tool-use planning
+
+Each v0.4 task adds:
+
+- at least three evidence sources, including explicit distractors
+- `expected_output.distractor_sources`
+- `hard_mode.anti_saturation`
+- `scoring.max_points`, partial-credit `dimensions`, and `critical_failures`
+
+The scoring contract is meant for human review. Automatic checks can flag obvious misses, but a publishable v0.4 result should include a result card with status, label counts, caveats, expected failure modes, and contamination assumptions.
+
+The public v0.4 shard is deliberately visible. Any serious comparison should use private variants generated or authored with different entities, values, language pairs, source order, and distractor polarity.

@@ -53,7 +53,9 @@ V03_REQUIRED_TASK_FIELDS = {
     "synthetic",
 }
 
-SUPPORTED_VERSIONS = {"0.2.0", "0.3.0"}
+V04_REQUIRED_TASK_FIELDS = V03_REQUIRED_TASK_FIELDS | {"scoring"}
+
+SUPPORTED_VERSIONS = {"0.2.0", "0.3.0", "0.4.0"}
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -97,11 +99,15 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
     if version not in SUPPORTED_VERSIONS:
         errors.append(f"{suite_path}: expected version in {sorted(SUPPORTED_VERSIONS)}, got {version!r}")
 
-    if version == "0.3.0":
-        if suite.get("suite_id") != "eurobench-v0.3":
-            errors.append(f"{suite_path}: v0.3 suite_id must be 'eurobench-v0.3'")
+    if version in {"0.3.0", "0.4.0"}:
+        expected_suite_id = f"eurobench-v{version[:3]}"
+        if suite.get("suite_id") != expected_suite_id:
+            errors.append(f"{suite_path}: v{version[:3]} suite_id must be '{expected_suite_id}'")
         if "hard_mode_strategy" not in suite:
-            errors.append(f"{suite_path}: v0.3 suite missing 'hard_mode_strategy'")
+            errors.append(f"{suite_path}: v{version[:3]} suite missing 'hard_mode_strategy'")
+    if version == "0.4.0":
+        if "result_card_template" not in suite:
+            errors.append(f"{suite_path}: v0.4 suite missing 'result_card_template'")
 
     task_ids: set[str] = set()
     for index, task in enumerate(suite.get("tasks", []), start=1):
@@ -109,6 +115,8 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
         missing_task_fields = sorted(REQUIRED_TASK_FIELDS - set(task))
         if version == "0.3.0":
             missing_task_fields.extend(sorted(V03_REQUIRED_TASK_FIELDS - set(task)))
+        if version == "0.4.0":
+            missing_task_fields.extend(sorted(V04_REQUIRED_TASK_FIELDS - set(task)))
         for field in missing_task_fields:
             errors.append(f"{prefix}: missing task field '{field}'")
 
@@ -130,7 +138,7 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
             if field not in source:
                 errors.append(f"{prefix} ({task_id}): source missing '{field}'")
 
-        if version == "0.3.0":
+        if version in {"0.3.0", "0.4.0"}:
             expected_output = task.get("expected_output", {})
             evidence_sources = task.get("evidence_sources", [])
             source_ids = expected_output.get("source_ids", [])
@@ -140,17 +148,69 @@ def validate_suite(suite: dict[str, Any]) -> list[str]:
                 if isinstance(source, dict) and isinstance(source.get("id"), str)
             }
             if not isinstance(task.get("synthetic"), bool) or not task.get("synthetic"):
-                errors.append(f"{prefix} ({task_id}): v0.3 task must be explicitly synthetic")
-            if not isinstance(evidence_sources, list) or len(evidence_sources) < 2:
-                errors.append(f"{prefix} ({task_id}): v0.3 task needs at least two evidence_sources")
+                errors.append(f"{prefix} ({task_id}): v{version[:3]} task must be explicitly synthetic")
+            minimum_sources = 3 if version == "0.4.0" else 2
+            if not isinstance(evidence_sources, list) or len(evidence_sources) < minimum_sources:
+                errors.append(f"{prefix} ({task_id}): v{version[:3]} task needs at least {minimum_sources} evidence_sources")
             if not isinstance(source_ids, list) or not source_ids:
                 errors.append(f"{prefix} ({task_id}): expected_output.source_ids must be non-empty")
             elif not set(source_ids).issubset(evidence_ids):
                 errors.append(f"{prefix} ({task_id}): expected source_ids not present in evidence_sources")
             if not task.get("difficulty_tags"):
-                errors.append(f"{prefix} ({task_id}): v0.3 task needs difficulty_tags")
+                errors.append(f"{prefix} ({task_id}): v{version[:3]} task needs difficulty_tags")
             if not task.get("failure_modes"):
-                errors.append(f"{prefix} ({task_id}): v0.3 task needs failure_modes")
+                errors.append(f"{prefix} ({task_id}): v{version[:3]} task needs failure_modes")
+
+        if version == "0.4.0":
+            expected_output = task.get("expected_output", {})
+            evidence_sources = task.get("evidence_sources", [])
+            evidence_ids = {
+                source.get("id")
+                for source in evidence_sources
+                if isinstance(source, dict) and isinstance(source.get("id"), str)
+            }
+            distractor_sources = expected_output.get("distractor_sources", [])
+            if not isinstance(distractor_sources, list) or not distractor_sources:
+                errors.append(f"{prefix} ({task_id}): expected_output.distractor_sources must be non-empty")
+            elif not set(distractor_sources).issubset(evidence_ids):
+                errors.append(f"{prefix} ({task_id}): distractor_sources not present in evidence_sources")
+            hard_mode = task.get("hard_mode", {})
+            if not isinstance(hard_mode, dict) or not hard_mode.get("anti_saturation"):
+                errors.append(f"{prefix} ({task_id}): v0.4 hard_mode needs anti_saturation notes")
+            scoring = task.get("scoring", {})
+            dimensions = scoring.get("dimensions", [])
+            max_points = scoring.get("max_points")
+            if not isinstance(max_points, int) or max_points < 5:
+                errors.append(f"{prefix} ({task_id}): scoring.max_points must be an integer >= 5")
+            if not isinstance(dimensions, list) or len(dimensions) < 3:
+                errors.append(f"{prefix} ({task_id}): scoring.dimensions needs at least three dimensions")
+            else:
+                total_points = 0
+                seen_dimension_ids: set[str] = set()
+                for dimension in dimensions:
+                    if not isinstance(dimension, dict):
+                        errors.append(f"{prefix} ({task_id}): scoring dimension must be an object")
+                        continue
+                    dimension_id = dimension.get("id")
+                    points = dimension.get("points")
+                    description = dimension.get("description")
+                    if not isinstance(dimension_id, str) or not dimension_id:
+                        errors.append(f"{prefix} ({task_id}): scoring dimension missing id")
+                    elif dimension_id in seen_dimension_ids:
+                        errors.append(f"{prefix} ({task_id}): duplicate scoring dimension id '{dimension_id}'")
+                    else:
+                        seen_dimension_ids.add(dimension_id)
+                    if not isinstance(points, int) or points <= 0:
+                        errors.append(f"{prefix} ({task_id}): scoring dimension '{dimension_id}' needs positive integer points")
+                    else:
+                        total_points += points
+                    if not isinstance(description, str) or len(description) < 10:
+                        errors.append(f"{prefix} ({task_id}): scoring dimension '{dimension_id}' needs a description")
+                if isinstance(max_points, int) and total_points != max_points:
+                    errors.append(f"{prefix} ({task_id}): scoring dimension points sum to {total_points}, expected {max_points}")
+            critical_failures = scoring.get("critical_failures", [])
+            if not isinstance(critical_failures, list) or not critical_failures:
+                errors.append(f"{prefix} ({task_id}): scoring.critical_failures must be non-empty")
 
     return errors
 
@@ -362,6 +422,7 @@ def build_results(
                     "difficulty_tags": task.get("difficulty_tags", []),
                     "failure_modes": task.get("failure_modes", []),
                     "expected_source_ids": task.get("expected_output", {}).get("source_ids", []),
+                    "scoring": task.get("scoring", {"max_points": None, "dimensions": []}),
                     "model_id": model_id,
                     "output": output,
                     "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),

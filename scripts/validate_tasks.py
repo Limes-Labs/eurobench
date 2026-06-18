@@ -36,6 +36,13 @@ def main(argv: list[str] | None = None) -> int:
         "distractor_or_conflict": 0,
         "uncertainty_or_abstention": 0,
     }
+    v04_scoring_signals = {
+        "evidence_grounding": 0,
+        "partial_credit": 0,
+        "critical_failures": 0,
+        "distractor_sources": 0,
+        "safe_refusal_boundary": 0,
+    }
     suite_ids: set[str] = set()
 
     for suite in suites:
@@ -61,6 +68,24 @@ def main(argv: list[str] | None = None) -> int:
                 hard_mode_signals["distractor_or_conflict"] += 1
             if checks.get("must_signal_uncertainty") or task.get("expected_output", {}).get("abstain_if"):
                 hard_mode_signals["uncertainty_or_abstention"] += 1
+            scoring = task.get("scoring", {})
+            if scoring.get("dimensions"):
+                v04_scoring_signals["partial_credit"] += 1
+                dimension_ids = {
+                    dimension.get("id")
+                    for dimension in scoring.get("dimensions", [])
+                    if isinstance(dimension, dict)
+                }
+                if {"evidence", "grounding"} & dimension_ids:
+                    v04_scoring_signals["evidence_grounding"] += 1
+            if scoring.get("critical_failures"):
+                v04_scoring_signals["critical_failures"] += 1
+            if task.get("expected_output", {}).get("distractor_sources"):
+                v04_scoring_signals["distractor_sources"] += 1
+            joined_failure_modes = " ".join(task.get("failure_modes", [])).lower()
+            joined_category = str(task.get("category", "")).lower()
+            if "unsafe" in joined_failure_modes or "cyber" in joined_category:
+                v04_scoring_signals["safe_refusal_boundary"] += 1
 
     for task_id in sorted(duplicate_ids):
         errors.append(f"duplicate task id across shards: {task_id}")
@@ -85,6 +110,21 @@ def main(argv: list[str] | None = None) -> int:
         missing_languages = sorted(required_languages - set(language_counts))
         for language in missing_languages:
             errors.append(f"missing language: {language}")
+    elif suite_ids == {"eurobench-v0.4"}:
+        required_categories = {
+            "european_law_admin_boundary",
+            "multilingual_cross_lingual_reasoning",
+            "long_context_contradiction_handling",
+            "safe_cybersecurity_assessment",
+            "math_physics_reasoning",
+            "agentic_tool_use_planning",
+        }
+        for signal, count in hard_mode_signals.items():
+            if count == 0:
+                errors.append(f"missing hard-mode signal: {signal}")
+        for signal, count in v04_scoring_signals.items():
+            if count == 0:
+                errors.append(f"missing v0.4 scoring signal: {signal}")
     else:
         required_categories = {
             "italian_institutional_qa",
@@ -109,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
         print("hard-mode signals:")
         for signal in sorted(hard_mode_signals):
             print(f"- {signal}: {hard_mode_signals[signal]}")
+    if suite_ids == {"eurobench-v0.4"}:
+        print("hard-mode signals:")
+        for signal in sorted(hard_mode_signals):
+            print(f"- {signal}: {hard_mode_signals[signal]}")
+        print("v0.4 scoring signals:")
+        for signal in sorted(v04_scoring_signals):
+            print(f"- {signal}: {v04_scoring_signals[signal]}")
     return 0
 
 
